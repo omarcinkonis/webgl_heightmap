@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Desert Oasis</title>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="module">
+        // REQUIRED SCRIPTS
+        import * as THREE from "https://threejs.org/build/three.module.js";                          // three.js webgl
+        import { OrbitControls } from "https://threejs.org/examples/jsm/controls/OrbitControls.js";  // enable camera movement
+        import { OBJLoader } from "https://threejs.org/examples/jsm/loaders/OBJLoader.js";           // enable object loading
+        import { MTLLoader } from "https://threejs.org/examples/jsm/loaders/MTLLoader.js";           // enable material loading
+        import { SceneUtils } from "https://threejs.org/examples/jsm/utils/SceneUtils.js";           // enable creation of multimaterial objects - used to display wireframes
+
+        // needs fixing - the online version of this file uses local links, so the reflection doesn't work properly
+        import { Water } from 'https://threejs.org/examples/jsm/objects/Water2.js';                  // enable usage of water
+
+        // INITIALIZATION
+        // variables
+        let scene, renderer, camera;
+        let controls;
+        let plane, water;
+
+        // scene
+        scene = new THREE.Scene();
+
+        // camera
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
+        camera.position.x = 500;
+        camera.position.y = 500;
+        camera.position.z = 100;
+        camera.up.set(0, 0, 1);
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+
+        // renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // CONTROLS
+        controls = new OrbitControls(camera, renderer.domElement);
+
+        // vertical angle control
+        controls.minPolarAngle = -Math.PI / 2;
+        controls.maxPolarAngle = Math.PI / 2.2;
+
+        // prohibits the user from changing camera position
+        controls.enablePan = false;
+
+        // limits zoom
+        controls.maxDistance = 800;
+
+        // LIGHT
+        // add ambient light
+        const light = new THREE.AmbientLight(0xfffee1, 1); // color, intensity
+        scene.add(light);
+
+        // simulate sunlight
+        const sunlight = new THREE.DirectionalLight(0xffffff, 0.5);
+        sunlight.position.set(50, 100, 0);
+        sunlight.target.position.set(0, 0, 0);
+        scene.add(sunlight);
+        scene.add(sunlight.target);
+
+        // third light for the sake of the task
+        // const light1 = new THREE.PointLight(0xffffff, 0.1);
+        // light1.position.set(0, 500, 0);
+        // scene.add(light1);
+
+
+        // ENVIRONMENT
+        // skybox
+        const skyBoxGeometry = new THREE.BoxGeometry(10000, 10000, 10000);
+        const skyBoxMaterial = new THREE.MeshBasicMaterial({
+            color: 0x0099ff,
+            side: THREE.BackSide,
+        });
+        const skyBox = new THREE.Mesh(skyBoxGeometry, skyBoxMaterial);
+        scene.add(skyBox);
+
+        // makeshift clouds with fog
+        scene.fog = new THREE.FogExp2(0xffffff, 0.00025);
+
+        // // ground
+        // const groundGeometry = new THREE.PlaneGeometry(1000, 1000, 10, 10);
+        // const groundMaterial = new THREE.MeshPhongMaterial({ color: 0xF2F0A1 });
+        // const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        // // ground.material.side = THREE.DoubleSide; // make ground visible from underneath
+        // ground.position.set(0, -3, 0);
+        // ground.rotation.x = -Math.PI / 2;
+        // scene.add(ground);
+
+        // water
+        const waterGeometry = new THREE.PlaneGeometry(500, 500);
+
+        water = new Water(waterGeometry, {
+            color: 0xcbd6c8,
+            scale: 1,
+            flowDirection: new THREE.Vector2(0.1, 0.1), // water flow (x, y)
+            textureWidth: 1024,
+            textureHeight: 1024
+        });
+
+        water.position.z = -35;
+        // water.rotation.x = Math.PI * - 0.5;
+
+        water.renderDepth = 0
+        scene.add(water);
+
+        // HEIGHTMAP
+        // return array with height data from img
+        function getHeightData(img, scale) {
+
+            if (scale == undefined) scale = 1;
+
+            var canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            var context = canvas.getContext('2d');
+
+            var size = img.width * img.height;
+            var data = new Float32Array(size);
+
+            context.drawImage(img, 0, 0);
+
+            for (var i = 0; i < size; i++) {
+                data[i] = 0
+            }
+
+            var imgd = context.getImageData(0, 0, img.width, img.height);
+            var pix = imgd.data;
+
+            var j = 0;
+            for (var i = 0; i < pix.length; i += 4) {
+                var all = pix[i] + pix[i + 1] + pix[i + 2];
+                data[j++] = all / (12 * scale);
+            }
+
+
+            // to get pixel number, use division
+            // to get line number, use modulus (%)
+
+            // the heightmap resolution in this example is 3000 x 3000
+            // pixels range from 0 to 2999
+            // lines also range from 0 to 2999
+
+            // // pixel 0 of line 0
+            // // 0 / 3000 = 0
+            // // 0 % 3000 = 0
+            // data[0] = 400; // 255 is the max height value that can be derived from a height map, this is set to higher for the purpose of showcase
+
+            // // pixel 0 of line 2999
+            // // 2999 / 3000 = 0
+            // // 2999 % 3000 = 2999
+            // data[2999] = 400;
+
+            // // pixel 1 of line 0
+            // // 3000 / 3000 = 1
+            // // 3000 % 3000 = 0
+            // data[3000] = 400;
+
+            // // pixel 55 of line 111
+            // // 165111 / 3000 = 55
+            // // 165111 % 3000 = 111
+            // data[165111] = 400;
+
+            // // to get data number for specific x and y coordinates, use the inverse of division and modulus: multiplication and addition
+            // // when x = 2999 and y = 0
+            // // num = 2999 * 3000 + 0 = 8997000
+            // data[8997000] = 400;
+
+            return data;
+        }
+
+        // Apply height data to plane
+        var img = new Image();
+        img.onload = function () {
+
+            // get height data from img
+            var data = getHeightData(img);
+
+            // plane
+            var geometry = new THREE.PlaneGeometry(3000, 3000, 2999, 2999);
+            // let material = new THREE.MeshPhongMaterial({ color: 0xF2F0A1 });
+            // material.side = THREE.DoubleSide;
+
+            let loader = new THREE.TextureLoader();
+            let texture = loader.load("textures/seamless_sand.jpg");
+            let material = new THREE.MeshPhongMaterial({
+                map: texture,
+                side: THREE.DoubleSide,
+            });
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(100, 100);
+
+            plane = new THREE.Mesh(geometry, material);
+
+            //set height of vertices
+            let vertices = plane.geometry.attributes.position.array;
+            let j = 0;
+            for (var i = 2; i < vertices.length; i += 3) {
+                vertices[i] = data[j] / 255 * 1000;
+                j++;
+            }
+
+            // plane.rotation.x = -Math.PI / 2;
+            plane.position.set(0, 0, -50);
+
+            plane.renderDepth = 1;
+            scene.add(plane);
+
+        };
+        // load img source
+        img.src = "heightmaps/heightmap.png";
+
+
+        // SCENE OBJECTS
+        // // cube
+        // const geometry = new THREE.BoxGeometry();
+        // const material = new THREE.MeshPhongMaterial({ color: 0xf39d28 });
+        // const cube = new THREE.Mesh(geometry, material);
+        // cube.castShadow = true;
+        // cube.receiveShadow = true;
+        // cube.scale.set(50, 50, 50);
+        // // cube.position.y = 200; // y represents height
+        // scene.add(cube);
+
+        // // .obj
+        // const mtlLoader = new MTLLoader();
+        // mtlLoader.load("models/obj/palmTrunk.mtl", (materials) => {
+        //     materials.preload();
+
+        //     const loader = new OBJLoader();
+        //     loader.setMaterials(materials);
+        //     loader.load("models/obj/palmTrunk.obj", function (object) {
+        //         object.rotation.y = Math.PI;
+        //         loader.setMaterials(materials);
+        //         object.scale.set(5, 5, 5);
+        //         object.position.set(300, 0, 300);
+        //         scene.add(object);
+        //     });
+        // });
+
+        // cube world origin
+        let geometry = new THREE.BoxGeometry();
+        let material = new THREE.MeshPhongMaterial({ color: 0xffffff });
+        const cube = new THREE.Mesh(geometry, material);
+        cube.castShadow = true;
+        cube.receiveShadow = true;
+        cube.scale.set(50, 50, 50);
+        scene.add(cube);
+
+        // cubeX
+        geometry = new THREE.BoxGeometry();
+        material = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const cubeX = new THREE.Mesh(geometry, material);
+        cubeX.castShadow = true;
+        cubeX.receiveShadow = true;
+        cubeX.scale.set(50, 50, 50);
+        cubeX.position.x = 100;
+        scene.add(cubeX);
+
+        // cubeY
+        geometry = new THREE.BoxGeometry();
+        material = new THREE.MeshPhongMaterial({ color: 0x000ff00 });
+        const cubeY = new THREE.Mesh(geometry, material);
+        cubeY.castShadow = true;
+        cubeY.receiveShadow = true;
+        cubeY.scale.set(50, 50, 50);
+        cubeY.position.y = 100;
+        scene.add(cubeY);
+
+        // cubeZ
+        geometry = new THREE.BoxGeometry();
+        material = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+        const cubeZ = new THREE.Mesh(geometry, material);
+        cubeZ.castShadow = true;
+        cubeZ.receiveShadow = true;
+        cubeZ.scale.set(50, 50, 50);
+        cubeZ.position.z = 100;
+        scene.add(cubeZ);
+
+
+        // ANIMATION
+        const animate = function () {
+            // controls.update(); // enables automatic camera rotation
+
+            requestAnimationFrame(animate);
+
+            cube.rotation.x += 0.01;
+            cube.rotation.y += 0.01;
+
+            renderer.render(scene, camera);
+        };
+
+        animate();
+
+        // RESOURCES
+        // https://threejs.org/docs/index.html#manual/en/introduction/Creating-a-scene
+        // https://threejs.org/docs/#examples/en/controls/OrbitControls
+        // https://riptutorial.com/three-js/example/26556/orbit-controls
+        // https://dustinpfister.github.io/2018/04/13/threejs-orbit-controls/
+        // https://threejsfundamentals.org/threejs/lessons/threejs-lights.html
+        // https://www.youtube.com/watch?v=hHGshzIXFWY
+        // https://danni-three.blogspot.com/2013/09/threejs-heightmaps.html
+        // https://discourse.threejs.org/t/three-geometry-will-be-removed-from-core-with-r125/22401
+        // https://threejsfundamentals.org/threejs/lessons/threejs-custom-buffergeometry.html
+    </script>
+</body>
+
+</html>
